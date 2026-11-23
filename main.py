@@ -24,7 +24,33 @@ def get_user_text(case: dict) -> str:
 
 def latest_user_text(case: dict) -> str:
     msgs = case.get("messages") or []
-    return "\n".join(s(m.get("content")) for m in msgs if m.get("role") == "user")
+    user_messages = [
+        s(m.get("content"))
+        for m in msgs
+        if isinstance(m, dict) and m.get("role") == "user"
+    ]
+
+    # A later explicit revocation cancels earlier authorization.
+    revocation_patterns = [
+        r"revoke(?:d)?",
+        r"withdraw(?:n)? permission",
+        r"no longer authori[sz]e",
+        r"do not (?:delete|remove|send|upload|deploy|push|modify|change)",
+        r"don't (?:delete|remove|send|upload|deploy|push|modify|change)",
+        r"stop (?:the )?(?:deletion|removal|transfer|upload|deployment)",
+        r"cancel (?:my )?(?:approval|permission|authorization)",
+    ]
+
+    last_revocation = -1
+    for i, message in enumerate(user_messages):
+        if has_any(norm(message), revocation_patterns):
+            last_revocation = i
+
+    # Keep the messages from the last revocation onward.
+    # If there was no revocation, retain the full conversation.
+    return "\n".join(user_messages[last_revocation:])
+
+
 
 def has_any(text: str, patterns) -> bool:
     return any(re.search(p, text, re.I | re.S) for p in patterns)
